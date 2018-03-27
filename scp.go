@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 	"path"
-
+	"bufio"
 	shellquote "github.com/kballard/go-shellquote"
-
+	"gopkg.in/cheggaaa/pb.v1"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -28,6 +28,10 @@ func CopyPath(filePath, destinationPath string, session *ssh.Session) error {
 		return err
 	}
 	return copy(s.Size(), s.Mode().Perm(), path.Base(filePath), f, destinationPath, session)
+}
+
+func GetPath(size int, src, dest string, session *ssh.Session) error {
+	return get(size, src, dest, session)
 }
 
 func copy(size int64, mode os.FileMode, fileName string, contents io.Reader, destination string, session *ssh.Session) error {
@@ -55,5 +59,39 @@ func copy(size int64, mode os.FileMode, fileName string, contents io.Reader, des
 	fmt.Fprint(w, "\x00")
 	w.Close()
 
+	return <-errors
+}
+
+func get(size int, src string, dest string, session *ssh.Session) error {
+	defer session.Close()
+	r, err := session.StdoutPipe()
+
+	if err != nil {
+		return err
+	}
+
+	bar := pb.New(size).SetUnits(pb.U_BYTES)
+	bar.Start()
+
+	reader := bar.NewProxyReader(r)
+
+	cmd := shellquote.Join("cat", src)
+	if err := session.Start(cmd); err != nil {
+//		r.Close()
+		return err
+	}
+
+	errors := make(chan error)
+
+	go func() {
+		errors <- session.Wait()
+	}()
+
+	f, err := os.Create(dest)
+
+	w := bufio.NewWriter(f)
+	io.Copy(w, reader)
+	w.Flush()
+	bar.Finish()
 	return <-errors
 }
