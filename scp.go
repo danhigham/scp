@@ -71,6 +71,7 @@ func get(size int, src string, dest string, session *ssh.Session) error {
 	}
 
 	bar := pb.New(size).SetUnits(pb.U_BYTES)
+	bar.SetMaxWidth(80)
 	bar.Start()
 
 	reader := bar.NewProxyReader(r)
